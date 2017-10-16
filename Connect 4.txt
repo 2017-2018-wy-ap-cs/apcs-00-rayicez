@@ -1,0 +1,168 @@
+--Ray's Connect 4
+type Board = [[Int]]
+
+drawLine :: [Int] -> String
+drawLine [] = []
+drawLine (x:xs)
+  | (x==0) = '_' : (drawLine xs)
+  | (x==1) = 'X' : (drawLine xs)
+  | (x==2) = 'O' : (drawLine xs)
+  | otherwise = error "input is not 0,1,2"
+
+drawBoard' :: Board -> String
+drawBoard' [] = []
+drawBoard' (x:xs) = drawLine x ++ "\n" ++ drawBoard' xs
+
+drawBoard :: Board -> String  
+drawBoard board = drawBoard' board
+-----------------------------------------------------------------------------------------
+boardLength = 5 
+boardHeight = 6
+
+getThreePairsFromOne :: (Int, Int) -> (Int, Int) -> [(Int,Int)]
+getThreePairsFromOne (x,y) (dx,dy) = [(x,y), (x+dx, y+dy), (x+2*dx, y+2*dy), (x+3*dx, y+3*dy)]  
+
+legalCoordinates :: [(Int,Int)] -> Bool
+legalCoordinates [] = True
+legalCoordinates (x:xs) = (((fst x) <= boardLength) && ((fst x) >= 0) && ((snd x) <= boardHeight) && ((snd x) >= 0)) && (legalCoordinates xs)
+
+grid = [(x, y)| x <- [0..boardLength], y <- [0..boardHeight]]
+
+allPossiblePairs :: [(Int,Int)] -> [[(Int,Int)]]
+allPossiblePairs [] = []
+allPossiblePairs (x:xs) = [getThreePairsFromOne x (1,0),
+                           getThreePairsFromOne x (-1,0),
+                           getThreePairsFromOne x (0,1),
+                           getThreePairsFromOne x (0,-1),
+                           getThreePairsFromOne x (1,1),
+                           getThreePairsFromOne x (-1,1),
+                           getThreePairsFromOne x (1,-1),
+                           getThreePairsFromOne x (-1,-1)]
+                           ++
+                           allPossiblePairs xs
+                           
+allPossiblePairs' = allPossiblePairs grid
+
+pairs :: [[(Int, Int)]] -> [[(Int, Int)]]
+pairs [] = []
+pairs (x:xs)
+  | legalCoordinates x = (x : pairs xs)
+  | otherwise = pairs xs
+  
+pairs' = pairs allPossiblePairs'
+-----------------------------------------------------------------------------------------
+correspondingValue :: [[Int]] -> (Int,Int) -> Int
+correspondingValue board (x,y) = (board !! x) !! y
+
+getValues :: Board -> [(Int,Int)] -> [Int]
+getValues _ [] = []
+getValues board (x:xs) = (correspondingValue board x) : (getValues board xs)
+
+allEqual :: Eq a => [a] -> Bool
+allEqual []     = True
+allEqual (x:xs) = all (== x) xs
+
+sameValues :: Board -> [(Int, Int)] -> Bool
+sameValues board pairs = allEqual (getValues board pairs) && (all (/= 0) (getValues board pairs))
+
+sameValues' :: Board -> [[(Int,Int)]] -> Bool
+sameValues' _ [] = False
+sameValues' board (x:xs) = (sameValues board x) || (sameValues' board xs)
+
+is_won' board = sameValues' board pairs' 
+
+is_won :: Board -> Bool
+is_won board = is_won' board
+-----------------------------------------------------------------------------------------
+bottommostEmptyRow :: Board -> Int -> Int
+bottommostEmptyRow [] _ = 0
+bottommostEmptyRow (x:xs) col
+  | (x !! col) == 0 = 1 + bottommostEmptyRow xs col
+  | otherwise = bottommostEmptyRow xs col
+
+bottommostEmptyRow' :: Board -> Int -> Int
+bottommostEmptyRow' board col
+  | (col > boardLength) || (col < 0) = -1
+  | bottommostEmptyRow board col == 0 = 0 
+  | otherwise = (bottommostEmptyRow board col) - 1 
+
+is_move_legal' :: Board -> Int -> Bool
+is_move_legal' board col 
+  | bottommostEmptyRow' board col == -1 = False
+  | (bottommostEmptyRow' board col == 0) && ((head board !! col == 1) || (head board !! col == 2)) = False
+  | otherwise = True
+
+is_move_legal :: Board -> Int -> Bool
+is_move_legal board col = is_move_legal' board col
+
+----------------------------------------------------------------------------------------
+updateMatrix :: [[a]] -> a -> (Int, Int) -> [[a]]
+updateMatrix matrix newitem (r,c) =
+  take r matrix ++
+  [take c (matrix !! r) ++ [newitem] ++ drop (c + 1) (matrix !! r)] ++
+  drop (r + 1) matrix
+  
+makePlay :: Board -> Int -> Int -> Board
+makePlay board col player = updateMatrix board player ((bottommostEmptyRow' board col), col)
+
+make_move :: Board -> Int -> Int -> Board
+make_move board col player = makePlay board col player
+
+----------------------------------------------------------------------------------------
+
+main :: IO()
+main = do
+  let board = make_board 8 6
+  event_loop board 1
+
+event_loop :: Board -> Int -> IO()
+event_loop board player = do
+  putStrLn $ drawBoard board
+
+  if is_won board then do
+    win_message board player
+    return ()
+  else do
+    col <- get_move player
+    handle_move board player col
+
+handle_move :: Board -> Int -> Int -> IO ()
+handle_move board player col
+    | col == -99              = goodbye
+    | is_move_legal board col = event_loop new_board (next_ player)
+    | otherwise = complain_and_restart
+    where complain_and_restart = do
+              putStrLn "ERROR: That is not a legal move."
+              event_loop board player
+          new_board = make_move board col player
+          goodbye = do putStrLn "You quit"
+
+make_board :: Int -> Int -> Board
+make_board cols rows =
+    [ [0 | _ <- [1..cols] ] | _ <- [1..rows] ]
+
+next_ player = 3 - player
+
+get_move :: Int -> IO Int
+get_move player = do
+  putStrLn $ "(Enter -99 to quit.)"
+  putStrLn $ "Player " ++(show player)++" moves."
+  putStr $ "Column [0-7]? "
+  x <- getLine
+  return (get_number x)
+
+-- get_number returns -1 for any invalid input
+get_number :: String -> Int
+get_number colIn
+    = case (reads colIn)::[(Int,String)] of
+        [(colnum, "")] -> colnum
+        _              -> -1
+                       
+win_message board player = do
+    putStrLn $ "The game is over"
+    putStrLn $ "Player "++(show $ next_ player)++" won!"
+    -- note: win computed at the start of the next turn
+    -- so current player is the loser
+ 
+-----------------------------------------------------------
+CODE BEFORE I ADAPTED IT (WITH TEST CS
